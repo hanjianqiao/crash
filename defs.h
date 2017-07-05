@@ -1988,6 +1988,18 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long sk_buff_len;
 	long sk_buff_data;
 	long nlmsghdr_nlmsg_type;
+	/* add block_device */
+	long block_device_bd_dev;
+	//long block_device_bd_inode;
+	long block_device_bd_super;
+	long block_device_bd_openers;
+	long block_device_bd_block_size;
+	long block_device_bd_part;
+	long block_device_bd_part_count;
+	long block_device_bd_contains;
+	//long block_device_bd_disk;
+	//long block_device_bd_list;
+	/* end block_device */
 };
 
 struct size_table {         /* stash of commonly-used sizes */
@@ -2136,6 +2148,9 @@ struct size_table {         /* stash of commonly-used sizes */
 	long nlmsghdr_nlmsg_type;
 	long sk_buff_head_qlen;
 	long sk_buff_len;
+	/* add block_device */
+	//long block_device;
+	/* end block_device */
 };
 
 struct array_table {

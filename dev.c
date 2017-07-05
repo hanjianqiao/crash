@@ -32,6 +32,10 @@ static const char *pci_strvendor(uint, char *);
 static const char *pci_strdev(uint, uint, char *); 
 
 static void diskio_option(void);
+static void diskbd_option(void);
+
+
+
  
 static struct dev_table {
         ulong flags;
@@ -41,6 +45,7 @@ struct dev_table *dt = &dev_table;
 
 #define DEV_INIT    0x1
 #define DISKIO_INIT 0x2
+#define DISKBD_INIT	0x4
 
 void
 dev_init(void)
@@ -93,9 +98,13 @@ cmd_dev(void)
 
 	flags = 0;
 
-        while ((c = getopt(argcnt, args, "dpi")) != EOF) {
+        while ((c = getopt(argcnt, args, "dpib")) != EOF) {
                 switch(c)
                 {
+		case 'b':
+			diskbd_option();
+			return;
+			
 		case 'd':
 			diskio_option();
 			return;
@@ -4154,3 +4163,69 @@ diskio_option(void)
 	diskio_init();
 	display_all_diskio();
 }
+
+static void diskbd_init(){
+	if (dt->flags & DISKBD_INIT)
+		return;
+	MEMBER_OFFSET_INIT(block_device_bd_dev, "block_device", "bd_dev");
+	MEMBER_OFFSET_INIT(block_device_bd_inode, "block_device", "bd_inode");
+	MEMBER_OFFSET_INIT(block_device_bd_openers, "block_device", "bd_openers");
+	MEMBER_OFFSET_INIT(block_device_bd_block_size, "block_device", "bd_block_size");
+	MEMBER_OFFSET_INIT(block_device_bd_part, "block_device", "bd_part");
+	MEMBER_OFFSET_INIT(block_device_bd_part_count, "block_device", "bd_part_count");
+	MEMBER_OFFSET_INIT(block_device_bd_disk, "block_device", "bd_disk");
+	MEMBER_OFFSET_INIT(block_device_bd_list, "block_device", "bd_list");
+	MEMBER_OFFSET_INIT(block_device_bd_contains, "block_device", "bd_contains");
+	STRUCT_SIZE_INIT(block_device, "block_device");
+	dt->flags |= DISKBD_INIT;
+}
+
+static void
+diskbd_option()
+{
+	long long buf[BUFSIZE];
+	unsigned long block_device_list_head_addr;
+	struct syment * sp;
+	char disk_name[32];
+
+	int max;
+	max = 100;
+
+	diskbd_init();
+	
+	sp = symbol_search("all_bdevs");
+	block_device_list_head_addr = sp->value;
+	fprintf(fp, "MAJOR\tMINOR\tBLOCK_DEVICE\t\tNAME\tINODE\t\t\tOPENERS\tCONTAINS\tPART_COUNT\n\n");
+	readmem(block_device_list_head_addr-OFFSET(block_device_bd_list), KVADDR, 
+				buf, SIZE(block_device), "block_device", FAULT_ON_ERROR);
+	block_device_list_head_addr = buf[OFFSET(block_device_bd_list)/8];
+	if(buf[OFFSET(block_device_bd_list)/8] == sp->value){
+	}else
+	do{
+  		readmem(block_device_list_head_addr-OFFSET(block_device_bd_list), KVADDR, 
+			buf, SIZE(block_device), "block_device", FAULT_ON_ERROR);
+		memset(disk_name, 0, sizeof(disk_name));
+		if(buf[OFFSET(block_device_bd_disk)/8]){
+	  		readmem(buf[OFFSET(block_device_bd_disk)/8]+OFFSET(gendisk_disk_name), KVADDR, 
+			disk_name, sizeof(disk_name), "gen_disk.disk_name", FAULT_ON_ERROR);
+			sprintf(disk_name+strlen(disk_name), "%x", buf[OFFSET(block_device_bd_dev)/8] & 0xfffff);
+		}
+		fprintf(fp, "%llx\t%llx\t%llx\t%s\t%llx\t%llx\t%llx\t%llx\t\n", 
+			buf[OFFSET(block_device_bd_dev)/8]>>20, 
+			buf[OFFSET(block_device_bd_dev)/8] & 0xfffff, 
+			block_device_list_head_addr-OFFSET(block_device_bd_list),
+			disk_name,
+			buf[OFFSET(block_device_bd_inode)/8],
+			buf[OFFSET(block_device_bd_openers)/8],
+			buf[OFFSET(block_device_bd_contains)/8],
+			buf[OFFSET(block_device_bd_part_count)/8]);
+		if(buf[OFFSET(block_device_bd_list)/8] == sp->value){
+			break;
+		}
+		block_device_list_head_addr = buf[OFFSET(block_device_bd_list)/8];
+		if(--max < 0){
+			break;
+		}
+	}while(1);
+}
+
