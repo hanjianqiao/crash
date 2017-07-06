@@ -1735,6 +1735,7 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long cdev_ops;
 	long probe_next;
 	long probe_dev;
+	long probe_range;
 	long probe_data;
 	long kobj_map_probes;
 	long task_struct_prio;

@@ -19,9 +19,11 @@
 
 static void dump_blkdevs(ulong);
 static void dump_chrdevs(ulong);
+static void dump_spec_chrdevs(ulong);
 static void dump_blkdevs_v2(ulong);
 static void dump_blkdevs_v3(ulong);
 static ulong search_cdev_map_probes(char *, int, int, ulong *);
+static ulong search_spec_cdev_map_probes(char *, int, int, ulonglong *, ulong *);
 static ulong search_bdev_map_probes(char *, int, int, ulong *);
 static void do_pci(void); 
 static void do_io(void);
@@ -98,9 +100,12 @@ cmd_dev(void)
 
 	flags = 0;
 
-        while ((c = getopt(argcnt, args, "dpib")) != EOF) {
+        while ((c = getopt(argcnt, args, "dpibc")) != EOF) {
                 switch(c)
                 {
+        case 'c':
+			dump_spec_chrdevs(flags);
+			return;
 		case 'b':
 			diskbd_option();
 			return;
@@ -422,6 +427,313 @@ search_cdev_map_probes(char *name, int major, int minor, ulong *cdev)
 	FREEBUF(probe_buf);
 	return ops;
 }
+
+/*
+ *  Dump the specific character device data.
+ */
+static void
+dump_spec_chrdevs(ulong flags)
+{
+	int i;
+	ulong addr, size;
+	char buf[BUFSIZE];
+	char buf2[BUFSIZE];
+	char strbuf0[BUFSIZE];
+	char strbuf1[BUFSIZE];
+	char strbuf2[BUFSIZE];
+	char strbuf3[BUFSIZE];
+	char strbuf4[BUFSIZE];
+	char strbuf5[BUFSIZE];
+	struct chrdevs {
+		ulong name;
+		ulong ops;
+	} chrdevs[MAX_DEV], *cp;
+	ulong *cdp;
+	char *char_device_struct_buf;
+	ulong next, savenext, name, fops, cdev; 
+	int major, minor;
+	int name_typecode;
+	size_t name_size;
+	ulonglong range;
+
+	if (!symbol_exists("chrdevs"))
+		error(FATAL, "chrdevs: symbol does not exist\n");
+
+	addr = symbol_value("chrdevs");
+	size = VALID_STRUCT(char_device_struct) ? 
+		sizeof(void *) : sizeof(struct chrdevs);
+
+        readmem(addr, KVADDR, &chrdevs[0], size * MAX_DEV,
+        	"chrdevs array", FAULT_ON_ERROR);
+	fprintf(fp, "%s%s%s%s%s%s%s%s%s%s%s%s\n",
+		mkstring(strbuf0, 8, LJUST, "CHRDEV"),
+		space(MINSPACE),
+		mkstring(strbuf1, 20, LJUST, "NAME"),
+		space(MINSPACE),
+		mkstring(strbuf2, 8, LJUST, "MINOR"),
+		space(MINSPACE),
+		mkstring(strbuf3, 20, LJUST, "RANGE"),
+		space(MINSPACE),
+		mkstring(strbuf4, 20, LJUST, "CDEV"),
+		space(MINSPACE),
+		mkstring(strbuf5, 20, LJUST, "OPERATIONS"),
+		space(MINSPACE));
+
+	if (VALID_STRUCT(char_device_struct))
+		goto char_device_struct;
+
+	for (i = 0, cp = &chrdevs[0]; i < MAX_DEV; i++, cp++) {
+		if (!cp->ops)
+			continue;
+
+		fprintf(fp, " %3d      ", i);
+		if (cp->name) {
+                	if (read_string(cp->name, buf, BUFSIZE-1))
+                        	fprintf(fp, "%-11s ", buf);
+                	else
+                        	fprintf(fp, "%-11s ", "(unknown)");
+			
+		} else
+                      	fprintf(fp, "%-11s ", "(unknown)");
+
+		sprintf(buf, "%s%%%dlx  ", 
+			strlen("OPERATIONS") < VADDR_PRLEN ? " " : "  ",
+			VADDR_PRLEN);
+		fprintf(fp, buf, cp->ops);
+		value_to_symstr(cp->ops, buf, 0);
+		if (strlen(buf))
+			fprintf(fp, "<%s>", buf);
+
+		fprintf(fp, "\n");
+	}
+	return;
+
+char_device_struct:
+
+	char_device_struct_buf = GETBUF(SIZE(char_device_struct));
+	cdp = (ulong *)&chrdevs[0];
+	name_typecode = MEMBER_TYPE("char_device_struct", "name");
+	name_size = (size_t)MEMBER_SIZE("char_device_struct", "name"); 
+
+	for (i = 0; i < MAX_DEV; i++, cdp++) {
+		if (!(*cdp))
+			continue;
+
+       		readmem(*cdp, KVADDR, char_device_struct_buf, 
+			SIZE(char_device_struct),
+                	"char_device_struct", FAULT_ON_ERROR);
+
+		next = ULONG(char_device_struct_buf + 
+			OFFSET(char_device_struct_next));
+		name = ULONG(char_device_struct_buf + 
+			OFFSET(char_device_struct_name));
+		switch (name_typecode)
+		{
+		case TYPE_CODE_ARRAY:
+			snprintf(buf, name_size, "%s",
+				 char_device_struct_buf +
+				 OFFSET(char_device_struct_name));
+			break;
+		case TYPE_CODE_PTR:
+		default:
+			if (!name || !read_string(name, buf, BUFSIZE-1))
+				break;
+		}
+
+		major = INT(char_device_struct_buf + 
+			OFFSET(char_device_struct_major));
+		minor = INT(char_device_struct_buf + 
+			OFFSET(char_device_struct_baseminor));
+
+		cdev = fops = 0;
+		if (VALID_MEMBER(char_device_struct_cdev) &&
+				VALID_STRUCT(cdev)) {
+			cdev = ULONG(char_device_struct_buf + 
+				OFFSET(char_device_struct_cdev));
+			if (cdev) {
+				addr = cdev + OFFSET(cdev_ops);
+				readmem(addr, KVADDR, &fops, 
+					sizeof(void *),
+					"cdev ops", FAULT_ON_ERROR);
+			}
+		} else {
+			fops = ULONG(char_device_struct_buf + 
+				OFFSET(char_device_struct_fops));
+		}
+
+		if (!fops)
+			fops = search_spec_cdev_map_probes(buf, major, minor, &range, &cdev);
+
+		if (!fops) {
+				mkstring(strbuf4, VADDR_PRLEN, CENTER, "(none)");
+				mkstring(strbuf5, VADDR_PRLEN, CENTER, " ");
+		} else {
+			mkstring(strbuf4, 20, LJUST|LONG_HEX, (void*)cdev);
+			value_to_symstr(fops, buf2, 0);
+			if (strlen(buf2))
+				mkstring(strbuf5, 20, LJUST, (void*)buf2);
+			else
+				mkstring(strbuf5, 20, LJUST|LONG_HEX, (void*)fops);
+		}
+		fprintf(fp, "%s%s%s%s%s%s%s%s%s%s%s%s\n",
+			mkstring(strbuf0, 8, LJUST|INT_DEC, (void*)(ulonglong)major),
+			space(MINSPACE),
+			mkstring(strbuf1, 20, LJUST, (void*)buf),
+			space(MINSPACE),
+			mkstring(strbuf2, 8, LJUST|INT_DEC, (void*)(ulonglong)minor),
+			space(MINSPACE),
+			mkstring(strbuf3, 20, LJUST|LONG_DEC, range),
+			space(MINSPACE),
+			strbuf4,
+			space(MINSPACE),
+			strbuf5,
+			space(MINSPACE));
+
+		if (CRASHDEBUG(1))
+			fprintf(fp, 
+		    	    "%lx: major: %d minor: %d name: %s next: %lx cdev: %lx fops: %lx\n",
+				*cdp, major, minor, buf, next, cdev, fops);
+
+		while (next) {
+       			readmem(savenext = next, KVADDR, char_device_struct_buf,
+				SIZE(char_device_struct),
+                		"char_device_struct", FAULT_ON_ERROR);
+
+	                next = ULONG(char_device_struct_buf +
+	                        OFFSET(char_device_struct_next));
+	                name = ULONG(char_device_struct_buf +
+	                        OFFSET(char_device_struct_name));
+			switch (name_typecode)
+			{
+			case TYPE_CODE_ARRAY:
+				snprintf(buf, name_size, "%s",
+					 char_device_struct_buf +
+					 OFFSET(char_device_struct_name));
+				break;
+			case TYPE_CODE_PTR:
+			default:
+				if (!name || !read_string(name, buf, BUFSIZE-1))
+					sprintf(buf, "(unknown)");
+				break;
+			}
+
+	                major = INT(char_device_struct_buf +
+	                        OFFSET(char_device_struct_major));
+	                minor = INT(char_device_struct_buf +
+	                        OFFSET(char_device_struct_baseminor));
+
+			fops = cdev = 0;
+			if (VALID_MEMBER(char_device_struct_cdev) &&
+					VALID_STRUCT(cdev)) {
+				cdev = ULONG(char_device_struct_buf + 
+					OFFSET(char_device_struct_cdev));
+				if (cdev) {
+					addr = cdev + OFFSET(cdev_ops);
+					readmem(addr, KVADDR, &fops,
+						sizeof(void *),
+						"cdev ops", FAULT_ON_ERROR);
+				}
+			} else {
+				fops = ULONG(char_device_struct_buf + 
+					OFFSET(char_device_struct_fops));
+			}
+ 
+			if (!fops)
+				fops = search_spec_cdev_map_probes(buf, major, minor, &range, &cdev);
+
+			
+			if (!fops) {
+					mkstring(strbuf4, VADDR_PRLEN, CENTER, "(none)");
+					mkstring(strbuf5, VADDR_PRLEN, CENTER, " ");
+			} else {
+				mkstring(strbuf4, 20, LJUST|LONG_HEX, (void*)cdev);
+				value_to_symstr(fops, buf2, 0);
+				if (strlen(buf2))
+					mkstring(strbuf5, 20, LJUST, (void*)buf2);
+				else
+					mkstring(strbuf5, 20, LJUST|LONG_HEX, (void*)fops);
+			}
+			fprintf(fp, "%s%s%s%s%s%s%s%s%s%s%s%s\n",
+				mkstring(strbuf0, 8, LJUST|INT_DEC, (void*)(ulonglong)major),
+				space(MINSPACE),
+				mkstring(strbuf1, 20, LJUST, (void*)buf),
+				space(MINSPACE),
+				mkstring(strbuf2, 8, LJUST|INT_DEC, (void*)(ulonglong)minor),
+				space(MINSPACE),
+				mkstring(strbuf3, 20, LJUST|LONG_DEC, range),
+				space(MINSPACE),
+				strbuf4,
+				space(MINSPACE),
+				strbuf5,
+				space(MINSPACE));
+			
+	
+			if (CRASHDEBUG(1))
+	                	fprintf(fp,
+	                        "%lx: major: %d minor: %d name: %s next: %lx cdev: %lx fops: %lx\n",
+	                        	savenext, major, minor, buf, next, cdev, fops);
+		}
+	}
+
+	FREEBUF(char_device_struct_buf);
+}
+
+/*
+ *  Search for a major/minor match by following the list headed
+ *  by the kobj_map.probes[major] array entry.  The "data" member
+ *  points to a cdev structure containing the file_operations
+ *  pointer. Print range.
+ */
+static ulong 
+search_spec_cdev_map_probes(char *name, int major, int minor, ulonglong *range, ulong *cdev)
+{
+	char *probe_buf;
+	ulong probes[MAX_DEV];
+	ulong cdev_map, addr, next, ops, probe_data;
+	uint probe_dev;
+
+	if (kernel_symbol_exists("cdev_map"))
+		get_symbol_data("cdev_map", sizeof(ulong), &cdev_map);
+	else
+		return 0;
+
+	addr = cdev_map + OFFSET(kobj_map_probes);
+	if (!readmem(addr, KVADDR, &probes[0], sizeof(void *) * MAX_DEV,
+	    "cdev_map.probes[]", QUIET|RETURN_ON_ERROR))
+		return 0;
+
+	ops = 0;
+	probe_buf = GETBUF(SIZE(probe));
+	next = probes[major];
+
+	while (next) {
+		if (!readmem(next, KVADDR, probe_buf, SIZE(probe),
+		    "struct probe", QUIET|RETURN_ON_ERROR))
+			break;
+
+		probe_dev = UINT(probe_buf + OFFSET(probe_dev));
+		
+
+		if ((MAJOR(probe_dev) == major) && 
+		    (MINOR(probe_dev) == minor)) {
+			probe_data = ULONG(probe_buf + OFFSET(probe_data));
+			*range = ULONGLONG(probe_buf + OFFSET(probe_range));
+			addr = probe_data + OFFSET(cdev_ops);
+			if (!readmem(addr, KVADDR, &ops, sizeof(void *),
+	    		    "cdev ops", QUIET|RETURN_ON_ERROR))
+				ops = 0;
+			else 
+				*cdev = probe_data;
+			break;
+		}
+
+		next = ULONG(probe_buf + OFFSET(probe_next));
+	}
+
+	FREEBUF(probe_buf);
+	return ops;
+}
+
 
 /*
  *  Dump the block device data.
@@ -4242,7 +4554,7 @@ diskbd_option()
 			space(MINSPACE),
 			mkstring(buf1, 5, LJUST|LONG_HEX, (char *)(buf[OFFSET(block_device_bd_dev)/8] & 0xfffff)),
 			space(MINSPACE),
-			mkstring(buf2, VADDR_PRLEN, LONG_HEX, block_device_list_head_addr-OFFSET(block_device_bd_list)),
+			mkstring(buf2, VADDR_PRLEN, LONG_HEX, (char *)(block_device_list_head_addr-OFFSET(block_device_bd_list))),
 			space(MINSPACE),
 			mkstring(buf3, 8, CENTER, disk_name),
 			space(MINSPACE),

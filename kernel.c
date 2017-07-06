@@ -639,6 +639,7 @@ kernel_init()
 		MEMBER_OFFSET_INIT(probe_next, "probe", "next");
 		MEMBER_OFFSET_INIT(probe_dev, "probe", "dev");
 		MEMBER_OFFSET_INIT(probe_data, "probe", "data");
+		MEMBER_OFFSET_INIT(probe_range, "probe", "range");
 	}
 
 	STRUCT_SIZE_INIT(kobj_map, "kobj_map");
