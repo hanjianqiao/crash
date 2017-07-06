@@ -2001,6 +2001,30 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	//long block_device_bd_disk;
 	//long block_device_bd_list;
 	/* end block_device */
+	/* add tty_driver */
+	long tty_driver_cdev;
+	long tty_driver_driver_name;
+	long tty_driver_name;
+	long tty_driver_major;
+	long tty_driver_minor_start;
+	long tty_driver_minor_num;
+	long tty_driver_num;
+	long tty_driver_type;
+	long tty_driver_subtype;
+	long tty_driver_ttys;
+	long tty_driver_tty_drivers;
+	/* end tty_driver */
+
+	/* add tty_struct */
+	long tty_struct_driver;
+	long tty_struct_ops;
+	long tty_struct_name;
+	long tty_struct_count;
+	long tty_struct_link;
+	long tty_struct_tty_files;
+	long tty_struct_read_buf;
+	long tty_struct_write_buf;
+	/* end tty_struct */
 };
 
 struct size_table {         /* stash of commonly-used sizes */
@@ -2149,9 +2173,8 @@ struct size_table {         /* stash of commonly-used sizes */
 	long nlmsghdr_nlmsg_type;
 	long sk_buff_head_qlen;
 	long sk_buff_len;
-	/* add block_device */
-	//long block_device;
-	/* end block_device */
+	long tty_driver;
+	long tty_struct;
 };
 
 struct array_table {

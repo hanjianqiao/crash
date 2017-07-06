@@ -33,6 +33,8 @@ static const char *pci_strclass (uint, char *);
 static const char *pci_strvendor(uint, char *); 
 static const char *pci_strdev(uint, uint, char *); 
 
+static void dump_tty_info(void);
+
 static void diskio_option(void);
 static void diskbd_option(void);
 
@@ -48,6 +50,7 @@ struct dev_table *dt = &dev_table;
 #define DEV_INIT    0x1
 #define DISKIO_INIT 0x2
 #define DISKBD_INIT	0x4
+#define TTY_INIT	0x8
 
 void
 dev_init(void)
@@ -100,16 +103,18 @@ cmd_dev(void)
 
 	flags = 0;
 
-        while ((c = getopt(argcnt, args, "dpibc")) != EOF) {
+        while ((c = getopt(argcnt, args, "dpibct")) != EOF) {
                 switch(c)
                 {
+        case 't':
+			dump_tty_info();
+			return;
         case 'c':
 			dump_spec_chrdevs(flags);
 			return;
 		case 'b':
 			diskbd_option();
 			return;
-			
 		case 'd':
 			diskio_option();
 			return;
@@ -582,7 +587,7 @@ char_device_struct:
 			space(MINSPACE),
 			mkstring(strbuf2, 8, LJUST|INT_DEC, (void*)(ulonglong)minor),
 			space(MINSPACE),
-			mkstring(strbuf3, 20, LJUST|LONG_DEC, range),
+			mkstring(strbuf3, 20, LJUST|LONG_DEC, (void *)range),
 			space(MINSPACE),
 			strbuf4,
 			space(MINSPACE),
@@ -660,7 +665,7 @@ char_device_struct:
 				space(MINSPACE),
 				mkstring(strbuf2, 8, LJUST|INT_DEC, (void*)(ulonglong)minor),
 				space(MINSPACE),
-				mkstring(strbuf3, 20, LJUST|LONG_DEC, range),
+				mkstring(strbuf3, 20, LJUST|LONG_DEC, (void *)range),
 				space(MINSPACE),
 				strbuf4,
 				space(MINSPACE),
@@ -4579,4 +4584,92 @@ diskbd_option()
 		}
 	}while(1);
 }
+
+static void tty_init(){
+	if (dt->flags & TTY_INIT)
+		return;
+	MEMBER_OFFSET_INIT(tty_driver_cdev, "tty_driver", "cdev");
+	MEMBER_OFFSET_INIT(tty_driver_driver_name, "tty_driver", "driver_name");
+	MEMBER_OFFSET_INIT(tty_driver_name, "tty_driver", "name");
+	MEMBER_OFFSET_INIT(tty_driver_major, "tty_driver", "major");
+	MEMBER_OFFSET_INIT(tty_driver_minor_start, "tty_driver", "minor_start");
+	MEMBER_OFFSET_INIT(tty_driver_minor_num, "tty_driver", "minor_num");
+	MEMBER_OFFSET_INIT(tty_driver_num, "tty_driver", "num");
+	MEMBER_OFFSET_INIT(tty_driver_type, "tty_driver", "type");
+	MEMBER_OFFSET_INIT(tty_driver_subtype, "tty_driver", "subtype");
+	MEMBER_OFFSET_INIT(tty_driver_ttys, "tty_driver", "ttys");
+	MEMBER_OFFSET_INIT(tty_driver_tty_drivers, "tty_driver", "tty_drivers");
+	
+	MEMBER_OFFSET_INIT(tty_struct_driver, "tty_struct", "driver");
+	MEMBER_OFFSET_INIT(tty_struct_ops, "tty_struct", "ops");
+	MEMBER_OFFSET_INIT(tty_struct_name, "tty_struct", "name");
+	MEMBER_OFFSET_INIT(tty_struct_count, "tty_struct", "count");
+	MEMBER_OFFSET_INIT(tty_struct_link, "tty_struct", "link");
+	MEMBER_OFFSET_INIT(tty_struct_tty_files, "tty_struct", "tty_files");
+	MEMBER_OFFSET_INIT(tty_struct_read_buf, "tty_struct", "read_buf");
+	MEMBER_OFFSET_INIT(tty_struct_write_buf, "tty_struct", "write_buf");
+
+	STRUCT_SIZE_INIT(tty_driver, "tty_driver");
+	STRUCT_SIZE_INIT(tty_struct, "tty_struct");
+
+	dt->flags |= TTY_INIT;
+}
+
+static void dump_a_type_tty(ulong ttys, int num){
+	ulong ttys_buf[256];
+	char tty_struct_buf[BUFSIZE];
+	int i;
+	readmem(ttys, KVADDR, ttys_buf, sizeof(void*)*num,
+			"tty_driver.ttys", FAULT_ON_ERROR);
+	//fprintf(fp, "num: %d\n", num);
+	for(i = 0; i < num; ++i){
+		if(ttys_buf[i] != 0){
+			readmem(ttys_buf[i], KVADDR, tty_struct_buf, SIZE(tty_struct),
+				"tty_struct", FAULT_ON_ERROR);
+			fprintf(fp, "%s\n", (char*)(tty_struct_buf+OFFSET(tty_struct_name)));
+		}else{
+			//fprintf(fp, "not used\n");
+		}
+	}
+}
+
+static void dump_tty_detail(ulonglong addr){
+	char tty_driver_buf[BUFSIZE];
+	char name_buf[BUFSIZE];
+
+	readmem(addr, KVADDR, tty_driver_buf, SIZE(tty_driver), "list_head.next", FAULT_ON_ERROR);
+	
+	readmem(*((long long*)(&tty_driver_buf[OFFSET(tty_driver_name)])), KVADDR, name_buf, 16,
+				"tty_driver.name", FAULT_ON_ERROR);
+	
+	fprintf(fp, "%s\n", name_buf);
+	if(*(unsigned long *)(&tty_driver_buf[OFFSET(tty_driver_ttys)]) != 0 
+		&& *(int*)(&tty_driver_buf[OFFSET(tty_driver_num)]) != 0){
+		dump_a_type_tty(*(unsigned long *)(&tty_driver_buf[OFFSET(tty_driver_ttys)]),
+			*(int*)(&tty_driver_buf[OFFSET(tty_driver_num)]));
+	}
+	fprintf(fp, "\n\n");
+	
+}
+
+static void dump_tty_info(void){
+	struct syment * tty_drivers;
+	ulonglong addr, next_addr;
+
+	tty_init();
+
+	tty_drivers = symbol_search("tty_drivers");
+	addr = tty_drivers->value;
+
+	do{
+	 	readmem(addr, KVADDR, &next_addr, sizeof(next_addr),
+			"list_head.next", FAULT_ON_ERROR);
+		if(next_addr == tty_drivers->value){
+			break;
+		}
+		addr = next_addr;
+		dump_tty_detail(addr-OFFSET(tty_driver_tty_drivers));
+	}while(1);
+}
+
 
