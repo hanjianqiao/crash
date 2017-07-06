@@ -4184,6 +4184,14 @@ static void
 diskbd_option()
 {
 	long long buf[BUFSIZE];
+	char buf0[BUFSIZE];
+	char buf1[BUFSIZE];
+	char buf2[BUFSIZE];
+	char buf3[BUFSIZE];
+	char buf4[BUFSIZE];
+	char buf5[BUFSIZE];
+	char buf6[BUFSIZE];
+	char buf7[BUFSIZE];
 	unsigned long block_device_list_head_addr;
 	struct syment * sp;
 	char disk_name[32];
@@ -4195,7 +4203,23 @@ diskbd_option()
 	
 	sp = symbol_search("all_bdevs");
 	block_device_list_head_addr = sp->value;
-	fprintf(fp, "MAJOR\tMINOR\tBLOCK_DEVICE\t\tNAME\tINODE\t\t\tOPENERS\tCONTAINS\tPART_COUNT\n\n");
+	fprintf(fp, "%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s\n",
+			mkstring(buf0, 5, LJUST, "MAJOR"),
+			space(MINSPACE),
+			mkstring(buf1, 5, LJUST, "MINOR"),
+			space(MINSPACE),
+			mkstring(buf2, 16, LJUST, "BLOCK_DEVICE"),
+			space(MINSPACE),
+			mkstring(buf3, 8, LJUST, "NAME"),
+			space(MINSPACE),
+			mkstring(buf4, 16, LJUST, "INODE"),
+			space(MINSPACE),
+			mkstring(buf5, 8, LJUST, "OPENERS"),
+			space(MINSPACE),
+			mkstring(buf6, 16, LJUST, "CONTAINS"),
+			space(MINSPACE),
+			mkstring(buf7, 10, LJUST, "PART_COUNT"),
+			space(MINSPACE));
 	readmem(block_device_list_head_addr-OFFSET(block_device_bd_list), KVADDR, 
 				buf, SIZE(block_device), "block_device", FAULT_ON_ERROR);
 	block_device_list_head_addr = buf[OFFSET(block_device_bd_list)/8];
@@ -4209,16 +4233,31 @@ diskbd_option()
 	  		readmem(buf[OFFSET(block_device_bd_disk)/8]+OFFSET(gendisk_disk_name), KVADDR, 
 			disk_name, sizeof(disk_name), "gen_disk.disk_name", FAULT_ON_ERROR);
 			sprintf(disk_name+strlen(disk_name), "%x", buf[OFFSET(block_device_bd_dev)/8] & 0xfffff);
+		}else{
+			sprintf(disk_name, "(None)");
 		}
-		fprintf(fp, "%llx\t%llx\t%llx\t%s\t%llx\t%llx\t%llx\t%llx\t\n", 
-			buf[OFFSET(block_device_bd_dev)/8]>>20, 
-			buf[OFFSET(block_device_bd_dev)/8] & 0xfffff, 
-			block_device_list_head_addr-OFFSET(block_device_bd_list),
-			disk_name,
-			buf[OFFSET(block_device_bd_inode)/8],
-			buf[OFFSET(block_device_bd_openers)/8],
-			buf[OFFSET(block_device_bd_contains)/8],
-			buf[OFFSET(block_device_bd_part_count)/8]);
+
+		fprintf(fp, "%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s\n",
+			mkstring(buf0, 5, LJUST|LONG_HEX, (char *)(unsigned long)(buf[OFFSET(block_device_bd_dev)/8]>>20)),
+			space(MINSPACE),
+			mkstring(buf1, 5, LJUST|LONG_HEX, (char *)(buf[OFFSET(block_device_bd_dev)/8] & 0xfffff)),
+			space(MINSPACE),
+			mkstring(buf2, VADDR_PRLEN, LONG_HEX, block_device_list_head_addr-OFFSET(block_device_bd_list)),
+			space(MINSPACE),
+			mkstring(buf3, 8, CENTER, disk_name),
+			space(MINSPACE),
+			mkstring(buf4, VADDR_PRLEN <= 11 ? 11 : VADDR_PRLEN,
+				 LJUST|LONG_HEX, (char *)(buf[OFFSET(block_device_bd_inode)/8])),
+			space(MINSPACE),
+			mkstring(buf5, 8, CENTER|LONG_HEX,
+				(char *)(unsigned long)(buf[OFFSET(block_device_bd_openers)/8])),
+			space(MINSPACE),
+			mkstring(buf6, VADDR_PRLEN, LJUST|LONG_HEX,
+				(char *)(unsigned long)(buf[OFFSET(block_device_bd_contains)/8])),
+			space(MINSPACE),
+			mkstring(buf7, 10, CENTER|LONG_HEX,
+				(char *)(unsigned long)(buf[OFFSET(block_device_bd_part_count)/8])),
+			space(MINSPACE));
 		if(buf[OFFSET(block_device_bd_list)/8] == sp->value){
 			break;
 		}
