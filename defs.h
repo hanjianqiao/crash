@@ -2024,7 +2024,9 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long tty_struct_link;
 	long tty_struct_tty_files;
 	long tty_struct_read_buf;
+	long tty_struct_read_cnt;
 	long tty_struct_write_buf;
+	long tty_struct_write_cnt;
 	/* end tty_struct */
 };
 

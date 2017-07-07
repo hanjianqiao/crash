@@ -4608,7 +4608,9 @@ static void tty_init(){
 	MEMBER_OFFSET_INIT(tty_struct_link, "tty_struct", "link");
 	MEMBER_OFFSET_INIT(tty_struct_tty_files, "tty_struct", "tty_files");
 	MEMBER_OFFSET_INIT(tty_struct_read_buf, "tty_struct", "read_buf");
+	MEMBER_OFFSET_INIT(tty_struct_read_cnt, "tty_struct", "read_cnt");
 	MEMBER_OFFSET_INIT(tty_struct_write_buf, "tty_struct", "write_buf");
+	MEMBER_OFFSET_INIT(tty_struct_write_cnt, "tty_struct", "write_cnt");
 
 	STRUCT_SIZE_INIT(tty_driver, "tty_driver");
 	STRUCT_SIZE_INIT(tty_struct, "tty_struct");
@@ -4625,6 +4627,10 @@ static void dump_a_type_tty(ulong ttys, int num){
 	char print_buf3[BUFSIZE];
 	char print_buf4[BUFSIZE];
 	char print_buf5[BUFSIZE];
+	char print_buf6[BUFSIZE];
+	char print_buf7[BUFSIZE];
+	char print_buf8[BUFSIZE];
+	char print_buf9[BUFSIZE];
 	int i;
 	readmem(ttys, KVADDR, ttys_buf, sizeof(void*)*num,
 			"tty_driver.ttys", FAULT_ON_ERROR);
@@ -4634,7 +4640,7 @@ static void dump_a_type_tty(ulong ttys, int num){
 				"tty_struct", FAULT_ON_ERROR);
 			//fprintf(fp, "%s\n", (char*)(tty_struct_buf+OFFSET(tty_struct_name)));
 			
-			fprintf(fp, "%s%s %s%s %s%s %s%s %s%s %s%s\n",
+			fprintf(fp, "%s%s %s%s %s%s %s%s %s%s %s%s %s%s %s%s %s%s %s%s\n",
 				mkstring(print_buf0, 5, LJUST, ""),
 				space(MINSPACE),
 				mkstring(print_buf1, 10, LJUST, ""),
@@ -4649,6 +4655,18 @@ static void dump_a_type_tty(ulong ttys, int num){
 					*(char **)(tty_struct_buf+OFFSET(tty_struct_ops))),
 				space(MINSPACE),
 				mkstring(print_buf5, 16, LJUST|LONG_HEX, (char *)ttys_buf[i]),
+				space(MINSPACE),
+				mkstring(print_buf6, 16, LJUST|LONG_HEX, 
+					*(char **)(tty_struct_buf+OFFSET(tty_struct_read_buf))),
+				space(MINSPACE),
+				mkstring(print_buf7, 8, LJUST|INT_DEC, 
+					(char*)(ulong)*(int*)(tty_struct_buf+OFFSET(tty_struct_read_cnt))),
+				space(MINSPACE),
+				mkstring(print_buf8, 16, LJUST|LONG_HEX, 
+					*(char **)(tty_struct_buf+OFFSET(tty_struct_write_buf))),
+				space(MINSPACE),
+				mkstring(print_buf9, 10, LJUST|INT_DEC, 
+					(char*)(ulong)*(int*)(tty_struct_buf+OFFSET(tty_struct_write_cnt))),
 				space(MINSPACE));
 		}else{
 			//fprintf(fp, "not used\n");
@@ -4667,6 +4685,10 @@ static void dump_tty_detail(ulonglong addr){
 	char print_buf3[BUFSIZE];
 	char print_buf4[BUFSIZE];
 	char print_buf5[BUFSIZE];
+	char print_buf6[BUFSIZE];
+	char print_buf7[BUFSIZE];
+	char print_buf8[BUFSIZE];
+	char print_buf9[BUFSIZE];
 
 	readmem(addr, KVADDR, tty_driver_buf, SIZE(tty_driver), "list_head.next", FAULT_ON_ERROR);
 	
@@ -4679,7 +4701,7 @@ static void dump_tty_detail(ulonglong addr){
 		mkstring(driver_name_buf, 16, LJUST, "(none)");
 	}
 	
-	fprintf(fp, "%s%s %s%s %s%s %s%s %s%s %s%s\n",
+	fprintf(fp, "%s%s %s%s %s%s %s%s %s%s %s%s %s%s %s%s %s%s %s%s\n",
 			mkstring(print_buf0, 5, LJUST|LONG_DEC, (char *)(ulong)*(int*)(tty_driver_buf+OFFSET(tty_driver_major))),
 			space(MINSPACE),
 			mkstring(print_buf1, 10, LJUST|LONG_DEC, (char *)(ulong)*(int*)(tty_driver_buf+OFFSET(tty_driver_minor_start))),
@@ -4691,6 +4713,14 @@ static void dump_tty_detail(ulonglong addr){
 			mkstring(print_buf4, 16, LJUST, driver_name_buf),
 			space(MINSPACE),
 			mkstring(print_buf5, 16, LJUST|LONG_HEX, (char *)addr),
+			space(MINSPACE),
+			mkstring(print_buf6, 16, LJUST, ""),
+			space(MINSPACE),
+			mkstring(print_buf7, 8, LJUST, ""),
+			space(MINSPACE),
+			mkstring(print_buf8, 16, LJUST, ""),
+			space(MINSPACE),
+			mkstring(print_buf9, 10, LJUST, ""),
 			space(MINSPACE));
 	
 	if(*(unsigned long *)(&tty_driver_buf[OFFSET(tty_driver_ttys)]) != 0 
@@ -4712,13 +4742,17 @@ static void dump_tty_info(void){
 	char print_buf3[BUFSIZE];
 	char print_buf4[BUFSIZE];
 	char print_buf5[BUFSIZE];
+	char print_buf6[BUFSIZE];
+	char print_buf7[BUFSIZE];
+	char print_buf8[BUFSIZE];
+	char print_buf9[BUFSIZE];
 
 	tty_init();
 
 	tty_drivers = symbol_search("tty_drivers");
 	addr = tty_drivers->value;
 
-	fprintf(fp, "%s%s %s%s %s%s %s%s %s%s %s%s\n\n",
+	fprintf(fp, "%s%s %s%s %s%s %s%s %s%s %s%s %s%s %s%s %s%s %s%s\n\n",
 			mkstring(print_buf0, 5, LJUST, "MAJOR"),
 			space(MINSPACE),
 			mkstring(print_buf1, 10, LJUST, "MINOR_BASE"),
@@ -4730,6 +4764,14 @@ static void dump_tty_info(void){
 			mkstring(print_buf4, 16, LJUST, "DRIVER/OPS"),
 			space(MINSPACE),
 			mkstring(print_buf5, 16, LJUST, "TTY"),
+			space(MINSPACE),
+			mkstring(print_buf6, 16, LJUST, "READ_BUF"),
+			space(MINSPACE),
+			mkstring(print_buf7, 8, LJUST, "READ_CNT"),
+			space(MINSPACE),
+			mkstring(print_buf8, 16, LJUST, "WRITE_BUF"),
+			space(MINSPACE),
+			mkstring(print_buf9, 10, LJUST, "WRITE_CNT"),
 			space(MINSPACE));
 
 	do{
