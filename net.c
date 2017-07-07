@@ -100,6 +100,9 @@ net_init(void)
 	 * called 'device' so we check for the new one first.
 	 */
 	STRUCT_SIZE_INIT(net_device, "net_device");
+	STRUCT_SIZE_INIT(net, "net");
+	MEMBER_OFFSET_INIT(net_list, "net", "list");
+	MEMBER_OFFSET_INIT(net_device_perm_addr, "net_device", "perm_addr");
 
 	if (VALID_STRUCT(net_device)) {
 		net->netdevice = "net_device";
@@ -313,7 +316,7 @@ net_init(void)
  * The net command...
  */
 
-#define NETOPTS	  "N:asSR:xdn"
+#define NETOPTS	  "N:asSR:xdnp"
 #define s_FLAG FOREACH_s_FLAG
 #define S_FLAG FOREACH_S_FLAG
 #define x_FLAG FOREACH_x_FLAG
@@ -328,6 +331,102 @@ net_init(void)
 
 #define NET_REFERENCE_CHECK(X)   (X)
 #define NET_REFERENCE_FOUND(X)   ((X) && ((X)->cmdflags & NET_REF_FOUND))
+
+static void dump_net_device(ulong addr, ulong ns_addr){
+	char net_device_buf[0x600];
+	char ip_addr_buf[BUFSIZE];
+		
+	char print_buf0[BUFSIZE];
+	char print_buf1[BUFSIZE];
+	char print_buf2[BUFSIZE];
+	char print_buf3[BUFSIZE];
+
+	if(IS_KVADDR(addr)){
+		readmem(addr, KVADDR, net_device_buf, SIZE(net_device),
+			"struct net_device", FAULT_ON_ERROR);
+
+		get_device_address(addr ,ip_addr_buf);
+		mkstring(print_buf2, 32, LJUST, ip_addr_buf);
+
+	 	fprintf(fp, "%s%s %s%s %s%s %s%s\n",
+			mkstring(print_buf0, 16, LJUST|LONG_HEX, addr),
+			space(MINSPACE),
+			mkstring(print_buf1, 16, LJUST, net_device_buf+OFFSET(net_device_name)),
+			space(MINSPACE),
+			print_buf2,
+			space(MINSPACE),
+			mkstring(print_buf3, 16, LJUST|LONG_HEX, ns_addr),
+			space(MINSPACE));
+		//fprintf(fp, "%llx\n", *(ulonglong*)(net_device_buf+OFFSET(net_device_ip_ptr)));
+	}
+
+}
+
+static void dump_netns(ulong addr){
+	char net_buf[BUFSIZE];
+	
+	char print_buf0[BUFSIZE];
+	char print_buf1[BUFSIZE];
+	char print_buf2[BUFSIZE];
+	char print_buf3[BUFSIZE];
+
+	ulonglong begin_addr, curr_addr, next_addr;
+	
+	readmem(addr, KVADDR, net_buf, SIZE(net),
+			"struct net", FAULT_ON_ERROR);
+
+	curr_addr = begin_addr = addr+OFFSET(net_dev_base_head);
+
+	do{
+		if(IS_KVADDR(curr_addr)){
+		 	readmem(curr_addr, KVADDR, &next_addr, sizeof(next_addr),
+				"list_head.next", FAULT_ON_ERROR);
+		}else{
+		 	break;
+		}
+		if(next_addr == begin_addr){
+			break;
+		}
+
+		curr_addr = next_addr;
+		dump_net_device(curr_addr-OFFSET(net_device_dev_list), addr);
+	}while(1);
+	
+}
+
+static void dump_all_ns_net(){
+	struct syment * net_namespace_list;
+	ulonglong start_addr, curr_addr, next_addr;
+
+	char print_buf0[BUFSIZE];
+	char print_buf1[BUFSIZE];
+	char print_buf2[BUFSIZE];
+	char print_buf3[BUFSIZE];
+
+	net_namespace_list = symbol_search("net_namespace_list");
+	curr_addr = start_addr = net_namespace_list->value;
+
+	fprintf(fp, "%s%s %s%s %s%s %s%s\n\n",
+			mkstring(print_buf0, 16, LJUST, "NET_DEVICE"),
+			space(MINSPACE),
+			mkstring(print_buf1, 16, LJUST, "NAME"),
+			space(MINSPACE),
+			mkstring(print_buf2, 32, LJUST, "IP ADDRESS(ES)"),
+			space(MINSPACE),
+			mkstring(print_buf3, 16, LJUST, "NET_NS"),
+			space(MINSPACE));
+
+	do{
+	 	readmem(curr_addr, KVADDR, &next_addr, sizeof(void*),
+			"list_head.next", FAULT_ON_ERROR);
+		if(next_addr == start_addr){
+			break;
+		}
+		curr_addr = next_addr;
+		dump_netns(curr_addr-OFFSET(net_list));
+	}while(1);
+
+}
 
 void
 cmd_net(void)
@@ -412,6 +511,9 @@ cmd_net(void)
 				}
 			}
 			break;
+		case 'p':
+			dump_all_ns_net();
+			return;
 
 		default:
 			argerrs++;

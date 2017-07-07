@@ -1517,6 +1517,7 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long net_device_ip_ptr;
 	long net_device_dev_list;
 	long net_dev_base_head;
+	long net_device_perm_addr;
 	long device_next;
 	long device_name;
 	long device_type;
@@ -2027,7 +2028,11 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long tty_struct_read_cnt;
 	long tty_struct_write_buf;
 	long tty_struct_write_cnt;
-	/* end tty_struct */
+	/* end tty_struct */ 
+
+	/* add net */
+	long net_list;
+	/* end net */
 };
 
 struct size_table {         /* stash of commonly-used sizes */
@@ -2178,6 +2183,7 @@ struct size_table {         /* stash of commonly-used sizes */
 	long sk_buff_len;
 	long tty_driver;
 	long tty_struct;
+	long net;
 };
 
 struct array_table {
