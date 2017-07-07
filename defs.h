@@ -2018,6 +2018,7 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	/* add tty_struct */
 	long tty_struct_driver;
 	long tty_struct_ops;
+	long tty_struct_index;
 	long tty_struct_name;
 	long tty_struct_count;
 	long tty_struct_link;

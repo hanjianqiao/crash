@@ -4602,6 +4602,7 @@ static void tty_init(){
 	
 	MEMBER_OFFSET_INIT(tty_struct_driver, "tty_struct", "driver");
 	MEMBER_OFFSET_INIT(tty_struct_ops, "tty_struct", "ops");
+	MEMBER_OFFSET_INIT(tty_struct_index, "tty_struct", "index");
 	MEMBER_OFFSET_INIT(tty_struct_name, "tty_struct", "name");
 	MEMBER_OFFSET_INIT(tty_struct_count, "tty_struct", "count");
 	MEMBER_OFFSET_INIT(tty_struct_link, "tty_struct", "link");
@@ -4618,15 +4619,37 @@ static void tty_init(){
 static void dump_a_type_tty(ulong ttys, int num){
 	ulong ttys_buf[256];
 	char tty_struct_buf[BUFSIZE];
+	char print_buf0[BUFSIZE];
+	char print_buf1[BUFSIZE];
+	char print_buf2[BUFSIZE];
+	char print_buf3[BUFSIZE];
+	char print_buf4[BUFSIZE];
+	char print_buf5[BUFSIZE];
 	int i;
 	readmem(ttys, KVADDR, ttys_buf, sizeof(void*)*num,
 			"tty_driver.ttys", FAULT_ON_ERROR);
-	//fprintf(fp, "num: %d\n", num);
 	for(i = 0; i < num; ++i){
 		if(ttys_buf[i] != 0){
 			readmem(ttys_buf[i], KVADDR, tty_struct_buf, SIZE(tty_struct),
 				"tty_struct", FAULT_ON_ERROR);
-			fprintf(fp, "%s\n", (char*)(tty_struct_buf+OFFSET(tty_struct_name)));
+			//fprintf(fp, "%s\n", (char*)(tty_struct_buf+OFFSET(tty_struct_name)));
+			
+			fprintf(fp, "%s%s %s%s %s%s %s%s %s%s %s%s\n",
+				mkstring(print_buf0, 5, LJUST, ""),
+				space(MINSPACE),
+				mkstring(print_buf1, 10, LJUST, ""),
+				space(MINSPACE),
+				mkstring(print_buf2, 10, LJUST|INT_DEC, 
+					(char *)(ulong)*(int*)(tty_struct_buf+OFFSET(tty_struct_index))),
+				space(MINSPACE),
+				mkstring(print_buf3, 16, LJUST, 
+					(char*)(tty_struct_buf+OFFSET(tty_struct_name))),
+				space(MINSPACE),
+				mkstring(print_buf4, 16, LJUST|LONG_HEX, 
+					*(char **)(tty_struct_buf+OFFSET(tty_struct_ops))),
+				space(MINSPACE),
+				mkstring(print_buf5, 16, LJUST|LONG_HEX, (char *)ttys_buf[i]),
+				space(MINSPACE));
 		}else{
 			//fprintf(fp, "not used\n");
 		}
@@ -4636,13 +4659,40 @@ static void dump_a_type_tty(ulong ttys, int num){
 static void dump_tty_detail(ulonglong addr){
 	char tty_driver_buf[BUFSIZE];
 	char name_buf[BUFSIZE];
+	char driver_name_buf[BUFSIZE];
+
+	char print_buf0[BUFSIZE];
+	char print_buf1[BUFSIZE];
+	char print_buf2[BUFSIZE];
+	char print_buf3[BUFSIZE];
+	char print_buf4[BUFSIZE];
+	char print_buf5[BUFSIZE];
 
 	readmem(addr, KVADDR, tty_driver_buf, SIZE(tty_driver), "list_head.next", FAULT_ON_ERROR);
 	
 	readmem(*((long long*)(&tty_driver_buf[OFFSET(tty_driver_name)])), KVADDR, name_buf, 16,
 				"tty_driver.name", FAULT_ON_ERROR);
+	if(*((long long*)(&tty_driver_buf[OFFSET(tty_driver_driver_name)])) != 0){
+		readmem(*((long long*)(&tty_driver_buf[OFFSET(tty_driver_driver_name)])), KVADDR, driver_name_buf, 16,
+				"tty_driver.driver_name", FAULT_ON_ERROR);
+	}else{
+		mkstring(driver_name_buf, 16, LJUST, "(none)");
+	}
 	
-	fprintf(fp, "%s\n", name_buf);
+	fprintf(fp, "%s%s %s%s %s%s %s%s %s%s %s%s\n",
+			mkstring(print_buf0, 5, LJUST|LONG_DEC, (char *)(ulong)*(int*)(tty_driver_buf+OFFSET(tty_driver_major))),
+			space(MINSPACE),
+			mkstring(print_buf1, 10, LJUST|LONG_DEC, (char *)(ulong)*(int*)(tty_driver_buf+OFFSET(tty_driver_minor_start))),
+			space(MINSPACE),
+			mkstring(print_buf2, 10, LJUST|LONG_DEC, (char *)(ulong)*(int*)(tty_driver_buf+OFFSET(tty_driver_num))),
+			space(MINSPACE),
+			mkstring(print_buf3, 16, LJUST, name_buf),
+			space(MINSPACE),
+			mkstring(print_buf4, 16, LJUST, driver_name_buf),
+			space(MINSPACE),
+			mkstring(print_buf5, 16, LJUST|LONG_HEX, (char *)addr),
+			space(MINSPACE));
+	
 	if(*(unsigned long *)(&tty_driver_buf[OFFSET(tty_driver_ttys)]) != 0 
 		&& *(int*)(&tty_driver_buf[OFFSET(tty_driver_num)]) != 0){
 		dump_a_type_tty(*(unsigned long *)(&tty_driver_buf[OFFSET(tty_driver_ttys)]),
@@ -4656,10 +4706,31 @@ static void dump_tty_info(void){
 	struct syment * tty_drivers;
 	ulonglong addr, next_addr;
 
+	char print_buf0[BUFSIZE];
+	char print_buf1[BUFSIZE];
+	char print_buf2[BUFSIZE];
+	char print_buf3[BUFSIZE];
+	char print_buf4[BUFSIZE];
+	char print_buf5[BUFSIZE];
+
 	tty_init();
 
 	tty_drivers = symbol_search("tty_drivers");
 	addr = tty_drivers->value;
+
+	fprintf(fp, "%s%s %s%s %s%s %s%s %s%s %s%s\n\n",
+			mkstring(print_buf0, 5, LJUST, "MAJOR"),
+			space(MINSPACE),
+			mkstring(print_buf1, 10, LJUST, "MINOR_BASE"),
+			space(MINSPACE),
+			mkstring(print_buf2, 10, LJUST, "NUM/OFFSET"),
+			space(MINSPACE),
+			mkstring(print_buf3, 16, LJUST, "NAME"),
+			space(MINSPACE),
+			mkstring(print_buf4, 16, LJUST, "DRIVER/OPS"),
+			space(MINSPACE),
+			mkstring(print_buf5, 16, LJUST, "TTY"),
+			space(MINSPACE));
 
 	do{
 	 	readmem(addr, KVADDR, &next_addr, sizeof(next_addr),

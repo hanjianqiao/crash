@@ -822,9 +822,9 @@ main_loop(void)
          *  do with the parsed line.
 	 */
 	while (TRUE) {
-		printf("Will get a command line\n");
 		process_command_line();
 		exec_command();
+		fprintf(fp, "\nWill get a command line\n");
 	}
 }
 
